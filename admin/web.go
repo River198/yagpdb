@@ -119,6 +119,11 @@ func (p *Plugin) handleGetPanel(w http.ResponseWriter, r *http.Request) (web.Tem
 	return tmpl, nil
 }
 
+const (
+	internalAPIPrefix = "http://"
+	sleepDuration     = 5 * time.Second
+)
+
 func (p *Plugin) ProxyGetInternalAPI(path string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		debug := r.URL.Query().Get("debug")
@@ -129,20 +134,36 @@ func (p *Plugin) ProxyGetInternalAPI(path string) http.Handler {
 
 		sh, err := findServicehost(r)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("Error querying service hosts: " + err.Error()))
+			http.Error(w, "Error querying service hosts: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		resp, err := http.Get("http://" + sh.InternalAPIAddress + path + debugStr)
+		resp, err := http.Get(internalAPIPrefix + sh.InternalAPIAddress + path + debugStr)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("Error querying internal api: " + err.Error()))
+			http.Error(w, "Error querying internal api: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		io.Copy(w, resp.Body)
 	})
+}
+
+func (p *Plugin) handleLaunchNodeVersion(w http.ResponseWriter, r *http.Request) {
+	logger.Println("ahahha")
+
+	client, err := createOrhcestatorRESTClient(r)
+	if err != nil {
+		http.Error(w, "Error querying service hosts: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	ver, err := client.GetDeployedVersion()
+	if err != nil {
+		http.Error(w, "Error getting deployed version: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Write([]byte(ver))
 }
 
 func (p *Plugin) handleShutdown(w http.ResponseWriter, r *http.Request) (web.TemplateData, error) {
